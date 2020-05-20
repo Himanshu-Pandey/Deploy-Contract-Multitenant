@@ -2,6 +2,7 @@ let Web3 = require('web3');
 let HttpHeaderProvider = require('httpheaderprovider');
 let request = require("request");
 let process = require("process");
+const EthereumTx = require('ethereumjs-tx').Transaction;
 let web3 = new Web3();
 let tesseraKeys = {
     'A1': 'xl1VWgypeSb3MBC2CLLadaNysHH/0OnsVDRmotCekmM=',
@@ -11,6 +12,7 @@ let tesseraKeys = {
 };
 let simpleContractABI = [{ "constant": false, "inputs": [{ "name": "x", "type": "uint256" }], "name": "set", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" }, { "constant": true, "inputs": [], "name": "get", "outputs": [{ "name": "retVal", "type": "uint256" }], "payable": false, "stateMutability": "view", "type": "function" }, { "constant": false, "inputs": [{ "name": "a", "type": "address" }, { "name": "x", "type": "uint256" }], "name": "setAnother", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "name": "initVal", "type": "uint256" }], "payable": false, "stateMutability": "nonpayable", "type": "constructor" }];
 let simpleContractByteCode = '0x608060405234801561001057600080fd5b506040516020806102258339810180604052602081101561003057600080fd5b810190808051906020019092919050505080600081905550506101cd806100586000396000f3fe608060405234801561001057600080fd5b506004361061005e576000357c01000000000000000000000000000000000000000000000000000000009004806360fe47b1146100635780636d4ce63c14610091578063ad12f8aa146100af575b600080fd5b61008f6004803603602081101561007957600080fd5b81019080803590602001909291905050506100fd565b005b610099610107565b6040518082815260200191505060405180910390f35b6100fb600480360360408110156100c557600080fd5b81019080803573ffffffffffffffffffffffffffffffffffffffff16906020019092919080359060200190929190505050610110565b005b8060008190555050565b60008054905090565b60008290508073ffffffffffffffffffffffffffffffffffffffff166360fe47b1836040518263ffffffff167c010000000000000000000000000000000000000000000000000000000002815260040180828152602001915050600060405180830381600087803b15801561018457600080fd5b505af1158015610198573d6000803e3d6000fd5b5050505050505056fea165627a7a72305820f5e61faad8a209cc7b9571e5ca5d7b93064a17d1ccfa1e26e22e3675ebf7331e0029';
+let keystore = { "address": "ed9d02e382b34818e88b88a309c7fe71e65f419d", "crypto": { "cipher": "aes-128-ctr", "ciphertext": "4e77046ba3f699e744acb4a89c36a3ea1158a1bd90a076d36675f4c883864377", "cipherparams": { "iv": "a8932af2a3c0225ee8e872bc0e462c11" }, "kdf": "scrypt", "kdfparams": { "dklen": 32, "n": 262144, "p": 1, "r": 8, "salt": "8ca49552b3e92f79c51f2cd3d38dfc723412c212e702bd337a3724e8937aff0f" }, "mac": "6d1354fef5aa0418389b1a5d1f5ee0050d7273292a1171c51fd02f9ecff55264" }, "id": "a65d1ac3-db7e-445d-a1cc-b6c5eeaa05e0", "version": 3 };
 let headers = {};
 var token_A1_A2 = {
     method: 'POST',
@@ -41,31 +43,53 @@ function setWeb3ProviderWithHeader() {
     web3.setProvider(provider);
 }
 
-function deployContract(accountAddress, privateFor, privateFrom) {
-    let contract = new web3.eth.Contract(simpleContractABI);
+function getFirstAccount() {
+    return web3.eth.getAccounts().then((accounts) => {
+        return accounts[0];
+    });
+}
 
-    return contract.deploy({
+async function deployContract(accountAddress, privateFor, privateFrom) {
+    let contract = new web3.eth.Contract(simpleContractABI);
+    let encodedABI = contract.deploy({
         data: simpleContractByteCode,
         arguments: [101]
-    }).send({
+    }).encodeABI();
+    let nonce = await web3.eth.getTransactionCount(accountAddress);
+    let tx = {
+        nonce: web3.utils.toHex(nonce),
         from: accountAddress,
         gas: 100000000,
         gasPrice: 0,
         privateFor: privateFor,
-        privateFrom: privateFrom
-    }).on('error', function (error) {
-        console.error(`Error in deploying contract: ${error}`);
-        process.exit(1);
-    }).on('receipt', function (receipt) {
-        console.log(`contract address : ${receipt.contractAddress}`);
-    }).then(function (obj) {
-        return obj;
-    });
-}
+        privateFrom: privateFrom,
+        data: encodedABI
+    }
+    console.log(`Transaction to be send is : ${JSON.stringify(tx)}`);
+    let decryptKey = web3.eth.accounts.decrypt(keystore, "");
+    let bufferPK = new Buffer(decryptKey.privateKey.substring(2), 'hex');
+    let transaction = new EthereumTx(tx);
 
-function getFirstAccount() {
-    return web3.eth.getAccounts().then((accounts) => {
-        return accounts[0];
+    console.log(`Signing the transaction using key ${JSON.stringify(decryptKey)}`);
+    transaction.sign(bufferPK);
+
+    console.log(`Sending signed transaction`);
+    web3.eth.sendSignedTransaction("0x" + transaction.serialize().toString('hex'), (_err, _res) => {
+        if (!_err) {
+            console.log("Success: ", _res);
+        }
+    }).on('confirmation', (confirmationNumber, receipt) => {
+        console.log('=> confirmation: ' + confirmationNumber);
+        console.log('=> receipt: ' + receipt);
+    }).on('transactionHash', hash => {
+        console.log('=> hash');
+        console.log(hash);
+    }).on('receipt', receipt => {
+        console.log('=> reciept');
+        console.log(receipt);
+    }).on('error', error => {
+        console.error('=> error');
+        console.error(error);
     });
 }
 

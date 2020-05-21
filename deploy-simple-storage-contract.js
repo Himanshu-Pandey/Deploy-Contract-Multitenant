@@ -81,20 +81,22 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
     request({
         method: 'POST',
         url: 'http://localhost:9080/storeraw',
-        data:
+        headers:
         {
-            "payload": [
-                transaction.serialize().toString('hex')
-            ],
-            "from": [
-                tesseraKeys.A1
-            ]
-        }
+            'content-type': 'application/json'
+        },
+        body: { payload: [signedHexPayload], from: [tesseraKeys.A1] },
+        json: true
     }, function (error, response, body) {
         if (error) throw new Error(error);
-        console.log(`\nData from tessera ${body}`);
+        console.log(`\nData from tessera \nResponse Status: ${response.statusCode} \nBody : ${JSON.stringify(body)}`);
         console.log(`\nSending signed transaction`);
-        web3.quorum.eth.sendRawPrivateTransaction(signedHexPayload, tx);
+
+        //Send data to quorum
+        web3.quorum.eth.sendRawPrivateTransaction(signedHexPayload, {
+            "privateFor": privateFor,
+            "privateFrom": privateFrom,
+        });
     });
 }
 

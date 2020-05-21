@@ -53,11 +53,16 @@ function getFirstAccount() {
 
 async function deployContract(accountAddress, privateFor, privateFrom) {
     let contract = new web3.eth.Contract(simpleContractABI);
+    const rawTransactionManager = quorumjs.RawTransactionManager(web3, {
+        // this is the Tessera third party APP URL (see the tessera config)
+        privateUrl: "http://localhost:9080"
+    });
     let encodedABI = contract.deploy({
         data: simpleContractByteCode,
         arguments: [101]
     }).encodeABI();
     let nonce = await web3.eth.getTransactionCount(accountAddress);
+    let rawTxHash = await rawTransactionManager.storeRawRequest(encodedABI, privateFrom);
     let tx = {
         nonce: web3.utils.toHex(nonce),
         from: accountAddress,
@@ -65,7 +70,7 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
         gasPrice: 0,
         privateFor: privateFor,
         privateFrom: privateFrom,
-        data: encodedABI
+        data: `0x${rawTxHash}`
     }
     console.log(`\nTransaction to be send is : ${JSON.stringify(tx)}`);
     let decryptKey = web3.eth.accounts.decrypt(keystore, "");
@@ -76,28 +81,9 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
     transaction.sign(bufferPK);
 
     const signedHexPayload = "0x" + transaction.serialize().toString('hex');
-
-    console.log('\nSaving data in tessera');
-    request({
-        method: 'POST',
-        url: 'http://localhost:9080/storeraw',
-        headers:
-        {
-            'content-type': 'application/json'
-        },
-        body: { payload: [signedHexPayload], from: [tesseraKeys.A1] },
-        json: true
-    }, function (error, response, body) {
-        if (error) throw new Error(error);
-        console.log(`\nData from tessera \nResponse Status: ${response.statusCode} \nBody : ${JSON.stringify(body)}`);
-        console.log(`\nSending signed transaction`);
-
-        //Send data to quorum
-        web3.quorum.eth.sendRawPrivateTransaction(signedHexPayload, {
-            "privateFor": privateFor,
-            "privateFrom": privateFrom,
-        });
-    });
+    const privateSignedTx = `0x${rawTransactionManager.setPrivate(signedHexPayload)}`;
+    console.log(`\nSending raw transaction ${privateSignedTx}`);
+    rawTransactionManager.sendRawRequest(privateSignedTx, privateFor);
 }
 
 (async function () {
@@ -110,3 +96,4 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
         await deployContract(account, [tesseraKeys.A2], tesseraKeys.A1);
     });
 })();
+

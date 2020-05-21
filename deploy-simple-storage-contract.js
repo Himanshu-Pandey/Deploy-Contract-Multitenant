@@ -81,7 +81,7 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
     transaction.sign(bufferPK);
 
     const signedHexPayload = "0x" + transaction.serialize().toString('hex');
-    const privateSignedTx = `0x${rawTransactionManager.setPrivate(signedHexPayload)}`;
+    const privateSignedTx = `0x${rawTransactionManager.setPrivate(signedHexPayload).toString("hex")}`;
     console.log(`\nSending raw transaction ${privateSignedTx}`);
     rawTransactionManager.sendRawRequest(privateSignedTx, privateFor);
 }
@@ -96,4 +96,3 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
         await deployContract(account, [tesseraKeys.A2], tesseraKeys.A1);
     });
 })();
-

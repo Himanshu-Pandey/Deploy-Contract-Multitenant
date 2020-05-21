@@ -1,7 +1,8 @@
+let process = require("process");
 let Web3 = require('web3');
 let HttpHeaderProvider = require('httpheaderprovider');
 let request = require("request");
-let process = require("process");
+const quorumjs = require("quorum-js");
 const EthereumTx = require('ethereumjs-tx').Transaction;
 let web3 = new Web3();
 let tesseraKeys = {
@@ -38,9 +39,10 @@ function getToken(callBack) {
 }
 
 function setWeb3ProviderWithHeader() {
-    console.log("Token", headers.Authorization);
+    console.log("\nToken", headers.Authorization);
     var provider = new HttpHeaderProvider('https://localhost:22000', headers);
     web3.setProvider(provider);
+    quorumjs.extend(web3);
 }
 
 function getFirstAccount() {
@@ -65,41 +67,44 @@ async function deployContract(accountAddress, privateFor, privateFrom) {
         privateFrom: privateFrom,
         data: encodedABI
     }
-    console.log(`Transaction to be send is : ${JSON.stringify(tx)}`);
+    console.log(`\nTransaction to be send is : ${JSON.stringify(tx)}`);
     let decryptKey = web3.eth.accounts.decrypt(keystore, "");
     let bufferPK = new Buffer(decryptKey.privateKey.substring(2), 'hex');
     let transaction = new EthereumTx(tx);
 
-    console.log(`Signing the transaction using key ${JSON.stringify(decryptKey)}`);
+    console.log(`\nSigning the transaction using key ${JSON.stringify(decryptKey)}`);
     transaction.sign(bufferPK);
 
-    console.log(`Sending signed transaction`);
-    web3.eth.sendSignedTransaction("0x" + transaction.serialize().toString('hex'), (_err, _res) => {
-        if (!_err) {
-            console.log("Success: ", _res);
+    const signedHexPayload = "0x" + transaction.serialize().toString('hex');
+
+    console.log('\nSaving data in tessera');
+    request({
+        method: 'POST',
+        url: 'http://localhost:9080/storeraw',
+        data:
+        {
+            "payload": [
+                transaction.serialize().toString('hex')
+            ],
+            "from": [
+                tesseraKeys.A1
+            ]
         }
-    }).on('confirmation', (confirmationNumber, receipt) => {
-        console.log('=> confirmation: ' + confirmationNumber);
-        console.log('=> receipt: ' + receipt);
-    }).on('transactionHash', hash => {
-        console.log('=> hash');
-        console.log(hash);
-    }).on('receipt', receipt => {
-        console.log('=> reciept');
-        console.log(receipt);
-    }).on('error', error => {
-        console.error('=> error');
-        console.error(error);
+    }, function (error, response, body) {
+        if (error) throw new Error(error);
+        console.log(`\nData from tessera ${body}`);
+        console.log(`\nSending signed transaction`);
+        web3.quorum.eth.sendRawPrivateTransaction(signedHexPayload, tx);
     });
 }
 
 (async function () {
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = 0;
     getToken(async function () {
-        console.log('Setting provider');
+        console.log('\nSetting provider');
         setWeb3ProviderWithHeader();
         const account = await getFirstAccount();
-        console.log(`Account used for deploying contract is ${account}`);
+        console.log(`\nAccount used for deploying contract is ${account}`);
         await deployContract(account, [tesseraKeys.A2], tesseraKeys.A1);
     });
 })();

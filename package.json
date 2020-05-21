@@ -12,6 +12,7 @@
   "dependencies": {
     "axios": "^0.19.2",
     "httpheaderprovider": "^0.3.4",
+    "quorum-js": "^0.3.5",
     "web3": "^1.2.7",
     "xmlhttprequest": "^1.8.0"
   }
